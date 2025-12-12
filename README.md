@@ -923,8 +923,8 @@ See the [`AGENTS.md`](AGENTS.md) file for the guidelines I provided to the AI du
 
 For version `0.1.0` of `qemu-compose`, it took:
 
-- 12 hours of human work
-- 270 iterations (messages sent to Sonnet 4.5)
-- Total tokens sent: 8,605,300
-- Total tokens received: 804,891
-- Total cost: $37.8600
+- `12` hours of human work
+- `270` iterations (messages sent to Sonnet 4.5)
+- Total tokens sent: `8,605,300`
+- Total tokens received: `804,891`
+- Total cost: `$37.86`
