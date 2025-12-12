@@ -1,0 +1,26 @@
+version: "1.0"
+networks:
+  default:
+    driver: bridge
+    subnet: auto
+
+vms:
+  fedora-vm:
+    image: https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2
+    cpu: 2
+    memory: 2048
+    disk:
+      size: 8G
+    networks:
+      - default
+    volumes:
+      - ./volumes/fedora/:/mnt/
+
+  ubuntu-vm:
+    image: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+    cpu: 2
+    memory: 2048
+    networks:
+      - default
+    volumes:
+      - ./volumes/ubuntu/:/mnt/

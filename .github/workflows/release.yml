@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.5'
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          
+          # Get build information
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u '+%Y-%m-%d_%H:%M:%S')
+          
+          # Build flags
+          LDFLAGS="-s -w -X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT} -X main.BuildDate=${BUILD_DATE}"
+          
+          # Build for Linux amd64
+          GOOS=linux GOARCH=amd64 go build -o dist/qemu-compose-linux-amd64 -ldflags "${LDFLAGS}" ./src
+          
+          # Build for Linux arm64
+          GOOS=linux GOARCH=arm64 go build -o dist/qemu-compose-linux-arm64 -ldflags "${LDFLAGS}" ./src
+          
+          # Create checksums
+          cd dist
+          sha256sum qemu-compose-* > checksums.txt
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/qemu-compose-linux-amd64
+            dist/qemu-compose-linux-arm64
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

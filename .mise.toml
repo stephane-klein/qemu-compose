@@ -1,0 +1,38 @@
+[tools]
+go = "1.23.5"
+
+[env]
+QEMU_COMPOSE_FILE = "./examples/qemu-compose.yaml"
+_.path = "./bin/"
+_.file = ".secret"
+
+[tasks.deps]
+description = "Download Go dependencies"
+run = "go mod download"
+
+[tasks.tidy]
+description = "Tidy Go dependencies"
+run = "go mod tidy"
+
+[tasks.build]
+description = "Build the qemu-compose binary"
+run = """
+mkdir -p ./bin/
+go mod tidy
+go build -o ./bin/qemu-compose ./src
+echo "Binary built: ./bin/qemu-compose"
+echo ""
+echo "Setting CAP_NET_ADMIN capability..."
+sudo setcap cap_net_admin+ep ./bin/qemu-compose
+echo "✓ CAP_NET_ADMIN capability granted"
+echo ""
+echo "Run 'qemu-compose doctor' to verify all dependencies"
+"""
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "rm -rf ./bin/"
+
+[tasks.fmt]
+description = "Format Go code"
+run = "go fmt ./src/..."
