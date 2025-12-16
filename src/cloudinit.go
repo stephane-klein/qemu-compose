@@ -105,11 +105,6 @@ func getProjectSSHPublicKey() (string, error) {
     return strings.TrimSpace(string(data)), nil
 }
 
-// generateCloudInitISO creates a cloud-init NoCloud ISO with user-data and meta-data
-func generateCloudInitISO(vmName string, imageURL string, networkCount int) (string, error) {
-    return generateCloudInitISOWithVolumes(vmName, imageURL, nil, nil)
-}
-
 // generateCloudInitISOWithVolumes creates a cloud-init NoCloud ISO with user-data, meta-data, and volume mounts
 func generateCloudInitISOWithVolumes(vmName string, imageURL string, macAddresses []string, volumeMounts []VMVolumeMount) (string, error) {
     logger.Printf("Generating cloud-init ISO for VM: %s", vmName)
