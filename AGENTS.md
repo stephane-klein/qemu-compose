@@ -120,6 +120,7 @@ qemu-compose supports two types of volumes:
 Volumes can be specified in two formats:
 
 **Short Form (String):**
+
 ```yaml
 volumes:
   - volume_name:/path/in/vm
@@ -128,6 +129,7 @@ volumes:
 ```
 
 **Long Form (Map):**
+
 ```yaml
 volumes:
   - source: volume_name          # Named volume or host path
@@ -138,12 +140,14 @@ volumes:
 ```
 
 **Short Form Parsing Rules:**
+
 - Format: `<source>:<target>[:<flags>]`
 - If source contains `/` or `\` or starts with `.`, it's a bind mount
 - Otherwise, it's a named volume
 - Optional flags: `ro` for read-only
 
 **Long Form Features:**
+
 - `source`: Named volume name or host path (relative or absolute)
 - `target`: Mount path inside VM (must be absolute, starting with `/`)
 - `read_only`: Boolean, default `false`
@@ -291,106 +295,29 @@ $ mise install
 ```yaml
 version: "1.0"
 networks:
-  frontend:
+  default:
     driver: bridge
     subnet: auto
-  backend:
-    driver: bridge
-    subnet: auto
-
-volumes:
-  postgres_data:
-    size: 20G
-  redis_data:
-    size: 10G
   
 vms:
-  nginx:
-    image: nginx/alpine
+  fedora-vm:
+    image: https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2
     cpu: 2
     memory: 1024
     disk:
       size: 5G
     networks:
-      - frontend
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - app1
-      - app2
+      - default
     volumes:
-      # Short form - bind mount with read-only
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./volumes/fedora/:/mnt/
       
-  app1:
-    image: fedora/39-cloud-base
+  ubuntu-vm:
+    image: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
     cpu: 2
     memory: 2048
-    disk:
-      size: 8G
-    networks:
-      - frontend
-      - backend
-    environment:
-      - DATABASE_URL=postgres://db:5432
-      - REDIS_URL=redis://cache:6379
-    depends_on:
-      - database
-      - cache
     volumes:
-      # Short form - bind mount with read-only
-      - ./app:/opt/app:ro
-      # Long form - bind mount with custom options
-      - source: /host/logs
-        target: /var/log/app
+      - source: ./volumes/ubuntu/
+        target: /mnt/
         automount: true
-        mount_options: "cache=loose"
-    provision:
-      - type: shell
-        inline: |
-          dnf install -y python3-pip
-          pip3 install flask gunicorn
           
-  app2:
-    image: fedora/39-cloud-base
-    cpu: 2
-    memory: 2048
-    networks:
-      - frontend
-      - backend
-    depends_on:
-      - database
-      - cache
-      
-  database:
-    image: postgres/15
-    cpu: 4
-    memory: 4096
-    disk:
-      size: 100G
-    networks:
-      - backend
-    volumes:
-      # Short form - named volume
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_PASSWORD=secret
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      
-  cache:
-    image: redis/7-alpine
-    cpu: 1
-    memory: 1024
-    networks:
-      - backend
-    volumes:
-      # Long form - named volume with read-only
-      - source: redis_data
-        target: /data
-        read_only: false
 ```

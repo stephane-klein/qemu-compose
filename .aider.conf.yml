@@ -5,6 +5,7 @@
 model: openrouter/deepseek/deepseek-v3.2
 weak-model: openrouter/deepseek/deepseek-v3.2
 
+map-tokens: 4096
 
 auto-commits: false
 dirty-commits: false
@@ -19,7 +20,7 @@ pretty: true
 
 stream: true
 
-read: AGENTS.md
+read: AGENTS_SUMMARY.md
 
 chat-language: english
 commit-language: english
