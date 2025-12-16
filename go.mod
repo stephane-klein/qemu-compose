@@ -2,6 +2,10 @@ module github.com/stephane-klein/qemu-compose
 
 go 1.23.5
 
+// SPDX-License-Identifier: LGPL-3.0-only
+
+// SPDX-License-Identifier: LGPL-3.0-only
+
 require (
 	github.com/schollz/progressbar/v3 v3.17.1
 	github.com/spf13/cobra v1.10.2
