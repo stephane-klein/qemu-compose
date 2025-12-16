@@ -6,6 +6,7 @@ import (
     "os/exec"
     "path/filepath"
     "strings"
+    "text/template"
 )
 
 // detectOSFromImage attempts to detect the OS type from the image URL
@@ -105,6 +106,82 @@ func getProjectSSHPublicKey() (string, error) {
     return strings.TrimSpace(string(data)), nil
 }
 
+// CloudInitData holds all data needed for cloud-init template rendering
+type CloudInitData struct {
+    VMName        string
+    OSUser        string
+    SSHPublicKey  string
+    MACAddresses  []string
+    VolumeMounts  []VMVolumeMount
+    Has9pMounts   bool
+}
+
+// has9pMounts checks if any volume mount is a bind mount (9p)
+func has9pMounts(volumeMounts []VMVolumeMount) bool {
+    for _, mount := range volumeMounts {
+        if mount.IsBindMount {
+            return true
+        }
+    }
+    return false
+}
+
+// cloudInitTemplate is the Go template for cloud-init user-data
+const cloudInitTemplate = `#cloud-config
+users:
+  - name: {{.OSUser}}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: false
+{{- if .SSHPublicKey}}
+    ssh_authorized_keys:
+      - {{.SSHPublicKey}}
+{{- end}}{{/* if .SSHPublicKey */}}
+chpasswd:
+  expire: false
+  list: |
+    {{.OSUser}}:password
+ssh_pwauth: true
+{{- if .MACAddresses}}
+network:
+  version: 2
+  ethernets:
+{{- range $i, $mac := .MACAddresses}}
+    net{{$i}}:
+      match:
+        macaddress: "{{$mac}}"
+      dhcp4: true
+      set-name: net{{$i}}
+{{- end}}{{/* range .MACAddresses */}}
+{{- end}}{{/* if .MACAddresses */}}
+{{- if .VolumeMounts}}
+{{- if .Has9pMounts}}
+packages:
+  - 9base
+{{- end}}{{/* if .Has9pMounts */}}
+bootcmd:
+{{- range .VolumeMounts}}
+  - mkdir -p {{.MountPath}}
+{{- end}}{{/* range .VolumeMounts - bootcmd */}}
+{{- if .Has9pMounts}}
+  - modprobe 9p
+  - modprobe 9pnet_virtio
+{{- end}}{{/* if .Has9pMounts */}}
+mounts:
+{{- $namedIdx := 0}}{{$bindIdx := 0}}
+{{- range .VolumeMounts}}
+{{- if .IsBindMount}}
+{{- if .Automount}}
+  - [mount{{$bindIdx}}, {{.MountPath}}, 9p, "{{if .MountOptions}}{{.MountOptions}}{{else}}trans=virtio,version=9p2000.L{{if .ReadOnly}},ro{{end}}{{end}}", "0", "0"]
+{{- $bindIdx = add $bindIdx 1}}
+{{- end}}{{/* if .Automount */}}
+{{- else}}
+  - [/dev/vd{{indexToLetter $namedIdx}}, {{.MountPath}}, ext4, "{{if .ReadOnly}}ro{{else}}defaults{{end}}", "0", "2"]
+{{- $namedIdx = add $namedIdx 1}}
+{{- end}}{{/* if .IsBindMount */}}
+{{- end}}{{/* range .VolumeMounts - mounts */}}
+{{- end}}{{/* if .VolumeMounts */}}`
+
 // generateCloudInitISOWithVolumes creates a cloud-init NoCloud ISO with user-data, meta-data, and volume mounts
 func generateCloudInitISOWithVolumes(vmName string, imageURL string, macAddresses []string, volumeMounts []VMVolumeMount) (string, error) {
     logger.Printf("Generating cloud-init ISO for VM: %s", vmName)
@@ -132,109 +209,39 @@ func generateCloudInitISOWithVolumes(vmName string, imageURL string, macAddresse
         sshPublicKey = ""
     }
     
-    sshKeysYAML := ""
-    if sshPublicKey != "" {
-        sshKeysYAML = fmt.Sprintf("\n    ssh_authorized_keys:\n      - %s", sshPublicKey)
+    // Prepare template data
+    data := CloudInitData{
+        VMName:       vmName,
+        OSUser:       defaultUser,
+        SSHPublicKey: sshPublicKey,
+        MACAddresses: macAddresses,
+        VolumeMounts: volumeMounts,
+        Has9pMounts:  has9pMounts(volumeMounts),
     }
     
-    // Build network configuration for all interfaces using MAC address matching
-    // This ensures all network interfaces are brought up with DHCP
-    networkConfigYAML := ""
-    if len(macAddresses) > 0 {
-        networkConfigYAML = "\nnetwork:\n  version: 2\n  ethernets:\n"
-        for i, macAddr := range macAddresses {
-            // Use generic interface names (net0, net1, etc.) with MAC matching
-            ifName := fmt.Sprintf("net%d", i)
-            networkConfigYAML += fmt.Sprintf("    %s:\n      match:\n        macaddress: \"%s\"\n      dhcp4: true\n      set-name: %s\n", ifName, macAddr, ifName)
-            logger.Printf("Added network interface to cloud-init: %s (MAC: %s)", ifName, macAddr)
-        }
+    // Create template with custom functions
+    tmpl, err := template.New("cloud-init").
+        Funcs(template.FuncMap{
+            "indexToLetter": func(i int) string {
+                return string('b' + i)
+            },
+            "add": func(a, b int) int {
+                return a + b
+            },
+        }).
+        Parse(cloudInitTemplate)
+    
+    if err != nil {
+        return "", fmt.Errorf("failed to parse cloud-init template: %w", err)
     }
     
-    // Build volume mount configuration
-    // Named volumes appear as /dev/vdb, /dev/vdc, etc. (after /dev/vda which is the main disk)
-    // Bind mounts use 9p with mount tags
-    mountsYAML := ""
-    bootcmdYAML := ""
-    packagesYAML := ""
-    
-    if len(volumeMounts) > 0 {
-        mountsYAML = "\nmounts:\n"
-        bootcmdYAML = "\nbootcmd:\n"
-        
-        // Check if we need 9p support
-        has9pMounts := false
-        for _, mount := range volumeMounts {
-            if mount.IsBindMount {
-                has9pMounts = true
-                break
-            }
-        }
-        
-        // Add 9pnet_virtio module if needed
-        if has9pMounts {
-            packagesYAML = "\npackages:\n  - 9base\n"
-            bootcmdYAML += "  - modprobe 9p\n  - modprobe 9pnet_virtio\n"
-        }
-        
-        namedVolumeIndex := 0
-        bindMountIndex := 0
-        
-        for _, mount := range volumeMounts {
-            // Create mount point directory
-            bootcmdYAML += fmt.Sprintf("  - mkdir -p %s\n", mount.MountPath)
-            
-            if mount.IsBindMount {
-                // Only add mount entry if automount is enabled
-                if mount.Automount {
-                    // Use 9p for bind mounts
-                    mountTag := fmt.Sprintf("mount%d", bindMountIndex)
-                    
-                    // Build mount options
-                    mountOptions := "trans=virtio,version=9p2000.L"
-                    if mount.MountOptions != "" {
-                        mountOptions = mount.MountOptions
-                    }
-                    if mount.ReadOnly {
-                        mountOptions += ",ro"
-                    }
-                    
-                    mountsYAML += fmt.Sprintf("  - [%s, %s, 9p, \"%s\", \"0\", \"0\"]\n", mountTag, mount.MountPath, mountOptions)
-                    logger.Printf("Added 9p bind mount to cloud-init: %s -> %s (ro=%v, automount=%v)", mount.HostPath, mount.MountPath, mount.ReadOnly, mount.Automount)
-                } else {
-                    logger.Printf("Skipped auto-mount for bind mount: %s -> %s (automount=false)", mount.HostPath, mount.MountPath)
-                }
-                bindMountIndex++
-            } else {
-                // Use virtio-blk for named volumes (always auto-mounted)
-                // Device name: /dev/vdb, /dev/vdc, etc.
-                deviceName := fmt.Sprintf("/dev/vd%c", 'b'+namedVolumeIndex)
-                namedVolumeIndex++
-                
-                mountOptions := "defaults"
-                if mount.ReadOnly {
-                    mountOptions = "ro"
-                }
-                
-                mountsYAML += fmt.Sprintf("  - [%s, %s, ext4, \"%s\", \"0\", \"2\"]\n", deviceName, mount.MountPath, mountOptions)
-                logger.Printf("Added named volume mount to cloud-init: %s -> %s (ro=%v)", deviceName, mount.MountPath, mount.ReadOnly)
-            }
-        }
+    // Execute template
+    var userDataBuilder strings.Builder
+    if err := tmpl.Execute(&userDataBuilder, data); err != nil {
+        return "", fmt.Errorf("failed to execute cloud-init template: %w", err)
     }
     
-    // Create user-data file with detected user, SSH key, network configuration, and volume mounts
-    userData := fmt.Sprintf(`#cloud-config
-users:
-  - name: %s
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-    lock_passwd: false%s
-chpasswd:
-  expire: false
-  list: |
-    %s:password
-ssh_pwauth: true%s%s%s%s
-`, defaultUser, sshKeysYAML, defaultUser, networkConfigYAML, packagesYAML, bootcmdYAML, mountsYAML)
-    
+    userData := userDataBuilder.String()
     userDataPath := filepath.Join(cloudInitDir, "user-data")
     if err := os.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
         return "", fmt.Errorf("failed to write user-data: %w", err)
@@ -248,10 +255,18 @@ ssh_pwauth: true%s%s%s%s
     }
     
     // Create network-config file if we have network configuration
-    if networkConfigYAML != "" {
+    if len(macAddresses) > 0 {
         networkConfigPath := filepath.Join(cloudInitDir, "network-config")
-        // Extract just the network config part (remove the leading newline)
-        networkConfigContent := strings.TrimPrefix(networkConfigYAML, "\n")
+        // Build network config YAML
+        var networkConfigBuilder strings.Builder
+        networkConfigBuilder.WriteString("network:\n  version: 2\n  ethernets:\n")
+        for i, macAddr := range macAddresses {
+            ifName := fmt.Sprintf("net%d", i)
+            networkConfigBuilder.WriteString(fmt.Sprintf("    %s:\n      match:\n        macaddress: \"%s\"\n      dhcp4: true\n      set-name: %s\n", ifName, macAddr, ifName))
+            logger.Printf("Added network interface to cloud-init: %s (MAC: %s)", ifName, macAddr)
+        }
+        
+        networkConfigContent := networkConfigBuilder.String()
         if err := os.WriteFile(networkConfigPath, []byte(networkConfigContent), 0644); err != nil {
             return "", fmt.Errorf("failed to write network-config: %w", err)
         }
@@ -263,7 +278,7 @@ ssh_pwauth: true%s%s%s%s
     
     // Build file list for ISO
     isoFiles := []string{userDataPath, metaDataPath}
-    if networkConfigYAML != "" {
+    if len(macAddresses) > 0 {
         networkConfigPath := filepath.Join(cloudInitDir, "network-config")
         isoFiles = append(isoFiles, networkConfigPath)
     }
