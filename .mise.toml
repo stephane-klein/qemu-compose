@@ -2,7 +2,7 @@
 go = "1.23.5"
 
 [env]
-QEMU_COMPOSE_FILE = "./examples/qemu-compose.yaml"
+QEMU_COMPOSE_FILE = "{{ config_root }}/examples/qemu-compose.yaml"
 _.path = "./bin/"
 _.file = ".secret"
 
