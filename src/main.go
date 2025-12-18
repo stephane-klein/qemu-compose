@@ -1416,10 +1416,10 @@ var consoleCmd = &cobra.Command{
 }
 
 var sshCmd = &cobra.Command{
-	Use:               "ssh <vm-name>",
-	Short:             "Connect to a VM via SSH",
-	Long:              `Connect to a running VM via SSH using the project SSH key and allocated port.`,
-	Args:              cobra.ExactArgs(1),
+	Use:               "ssh <vm-name> [command...]",
+	Short:             "Connect to a VM via SSH or run a command",
+	Long:              `Connect to a running VM via SSH using the project SSH key and allocated port. If a command is provided, it will be executed on the VM.`,
+	Args:              cobra.MinimumNArgs(1),
 	ValidArgsFunction: getVMNames,
 	Run: func(cmd *cobra.Command, args []string) {
 		vmName := args[0]
@@ -1487,6 +1487,11 @@ var sshCmd = &cobra.Command{
 			"-o", "StrictHostKeyChecking=no",
 			"-o", "UserKnownHostsFile=/dev/null",
 			fmt.Sprintf("%s@localhost", defaultUser),
+		}
+
+		// Add command arguments if provided
+		if len(args) > 1 {
+			sshArgs = append(sshArgs, args[1:]...)
 		}
 
 		// Execute SSH command
