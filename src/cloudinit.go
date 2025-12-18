@@ -128,6 +128,13 @@ func has9pMounts(volumeMounts []VMVolumeMount) bool {
 
 // cloudInitTemplate is the Go template for cloud-init user-data
 const cloudInitTemplate = `#cloud-config
+# Automatically resize partitions and filesystems to fill available disk space
+growpart:
+  mode: auto
+  devices: ['/']
+  ignore_growroot_disabled: false
+resizefs: true
+
 users:
   - name: {{.OSUser}}
     sudo: ALL=(ALL) NOPASSWD:ALL

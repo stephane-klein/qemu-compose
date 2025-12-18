@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION="v0.2.0"
+VERSION="v0.3.0"
 BASE_URL="https://github.com/stephane-klein/qemu-compose/releases/download/${VERSION}"
 
 # Create ~/bin/ directory if it doesn't exist
