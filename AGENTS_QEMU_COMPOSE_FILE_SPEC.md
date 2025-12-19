@@ -56,12 +56,16 @@ vms:
     memory: <int>                     # Required: RAM in MB
     disk:                             # Optional: disk configuration
       size: <string>                  # Disk size (e.g., "8G", "50G")
+                                      # default value is 10Go
     networks:                         # Optional: list of network names
       - frontend
       - backend
     volumes:                          # Optional: volume mounts
       - <VolumeMount>
 ```
+
+The 10G default disk size is not a size problem because QCOW2 images allocate disk space dynamically
+on the host as the VM actually uses it, rather than reserving the full amount upfront.
 
 ## VolumeMount Object
 

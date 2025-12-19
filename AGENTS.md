@@ -261,6 +261,9 @@ VMs can use both named volumes and bind mounts simultaneously. The implementatio
 - **Purpose:** Store VM instance-specific disk images (COW overlays)
 - **Scope:** Project-local, one directory per VM
 - **Managed by:** `qemu-compose up` command
+- **Default size:** 10Go. The 10G default disk size is not a size problem because QCOW2 images
+  allocate disk space dynamically on the host as the VM actually uses it, rather than reserving the
+  full amount upfront.
 
 ### Network Metadata
 
@@ -317,7 +320,7 @@ vms:
     cpu: 2
     memory: 1024
     disk:
-      size: 5G
+      size: 5G # default value is 10Go
     networks:
       - default
     volumes:

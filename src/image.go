@@ -183,6 +183,13 @@ func createInstanceDisk(vmName, baseImagePath string, diskConfig *Disk) (string,
 	instanceDiskPath := filepath.Join(instanceDir, "disk.qcow2")
 	diskAlreadyExists := false
 
+	// Apply default disk size if not specified
+	if diskConfig == nil {
+		diskConfig = &Disk{Size: "10G"}
+	} else if diskConfig.Size == "" {
+		diskConfig.Size = "10G"
+	}
+
 	// Check if instance disk already exists
 	if _, err := os.Stat(instanceDiskPath); err == nil {
 		logger.Printf("Instance disk already exists: %s", instanceDiskPath)
