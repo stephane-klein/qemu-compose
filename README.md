@@ -945,8 +945,8 @@ dnsmasq unit naming:
 
 ## Contributing
 
-We welcome contributions to qemu-compose! If you're interested in helping improve the project, please read our
-[CONTRIBUTING.md](CONTRIBUTING.md) file for detailed guidelines on:
+We welcome contributions to qemu-compose! If you're interested in helping improve the project,
+please read our [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed guidelines on:
 
 - Setting up your development environment
 - Building the project

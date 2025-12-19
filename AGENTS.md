@@ -2,8 +2,9 @@
 
 ## Project Overview
 
-This project implements a CLI tool in Golang, similar to `docker-compose` or [`podman-compose`](https://github.com/containers/podman-compose),
-but designed to launch and manage Virtual Machines with [QEMU](https://www.qemu.org).
+This project implements a CLI tool in Golang, similar to `docker-compose` or
+[`podman-compose`](https://github.com/containers/podman-compose), but designed to launch and manage
+Virtual Machines with [QEMU](https://www.qemu.org).
 
 ## Development Environment
 
@@ -19,7 +20,8 @@ but designed to launch and manage Virtual Machines with [QEMU](https://www.qemu.
 ### Linux-Only Support
 
 - **Platform:** qemu-compose only supports Linux
-- **Rationale:** The tool relies on Linux-specific features (systemd, user sessions) and is designed for Linux server/workstation environments
+- **Rationale:** The tool relies on Linux-specific features (systemd, user sessions) and is designed
+  for Linux server/workstation environments
 
 ### systemd Integration
 
@@ -35,14 +37,17 @@ but designed to launch and manage Virtual Machines with [QEMU](https://www.qemu.
 
 ### Network Management
 
-- **Library:** Use the [vishvananda/netlink](https://github.com/vishvananda/netlink) Go library for all network operations
-- **Rationale:** 
+- **Library:** Use the [vishvananda/netlink](https://github.com/vishvananda/netlink) Go library for
+  all network operations
+- **Rationale:**
   - Avoids spawning external `ip` commands which require elevated privileges
   - Provides native Go API for creating/deleting bridges and TAP devices
   - More reliable error handling and state management
   - Better performance (no process spawning overhead)
-- **Capabilities:** The `qemu-compose` binary requires `CAP_NET_ADMIN` capability to manage network interfaces
-- **Setup:** Users must grant the capability once using: `sudo setcap cap_net_admin=ep $(which qemu-compose)`
+- **Capabilities:** The `qemu-compose` binary requires `CAP_NET_ADMIN` capability to manage network
+  interfaces
+- **Setup:** Users must grant the capability once using:
+  `sudo setcap cap_net_admin=ep $(which qemu-compose)`
 - **Verification:** The `doctor` command checks if the capability is properly set
 
 ### DHCP and IP Management
@@ -98,10 +103,12 @@ qemu-compose supports two types of volumes:
 - **Technology:** Use 9p (virtio-9p) filesystem sharing
 - **Attachment:** Mounted via QEMU's `-virtfs` option with unique mount tags
 - **Security Model:** `passthrough` (requires matching UIDs between host and guest)
-- **Path Resolution:** 
-  - **Relative paths** (e.g., `./config`) are resolved **relative to the compose file location**, not the current working directory
+- **Path Resolution:**
+  - **Relative paths** (e.g., `./config`) are resolved **relative to the compose file location**,
+    not the current working directory
   - **Absolute paths** (e.g., `/host/path`) are used as-is
-- **Mounting:** Automatically mounted via cloud-init using 9p filesystem type (when `automount: true`)
+- **Mounting:** Automatically mounted via cloud-init using 9p filesystem type (when
+  `automount: true`)
 - **Read-Only Support:** Can be mounted read-only with `read_only: true`
 - **Auto-mount Control:** Can be disabled with `automount: false` for manual mounting inside the VM
 - **Dependencies:** Requires 9p kernel modules and 9base package (installed via cloud-init)
@@ -160,23 +167,23 @@ volumes:
 volumes:
   # Short form - named volume
   - postgres_data:/var/lib/postgresql/data
-  
+
   # Short form - bind mount (relative path)
   - ./config:/etc/myapp
-  
+
   # Short form - bind mount with read-only flag
   - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  
+
   # Long form - named volume with read-only
   - source: app_data
     target: /mnt/shared
     read_only: true
-  
+
   # Long form - bind mount with auto-mount disabled
   - source: ./scripts
     target: /opt/scripts
     automount: false
-  
+
   # Long form - bind mount with custom mount options
   - source: ./cache
     target: /var/cache/app
@@ -193,12 +200,14 @@ volumes:
 
 - **Named volumes:** Always auto-mounted via cloud-init (cannot be disabled)
 - **Bind mounts:** Auto-mounted by default, can be disabled with `automount: false`
-- When `automount: false`, the volume is still attached to QEMU with `-virtfs`, but cloud-init won't generate mount commands
+- When `automount: false`, the volume is still attached to QEMU with `-virtfs`, but cloud-init won't
+  generate mount commands
 - Users can manually mount with: `mount -t 9p -o trans=virtio,version=9p2000.L <mount_tag> <target>`
 
 #### Mixed Volume Support
 
 VMs can use both named volumes and bind mounts simultaneously. The implementation handles:
+
 - Named volumes as virtio-blk devices (sequential device names: `/dev/vdb`, `/dev/vdc`, etc.)
 - Bind mounts as 9p filesystems (sequential mount tags: `mount0`, `mount1`, etc.)
 - Cloud-init configuration for both types in a single user-data file
@@ -212,7 +221,8 @@ VMs can use both named volumes and bind mounts simultaneously. The implementatio
   - All files and directories use user-owned paths (`~/.local/share/`, `./.qemu-compose/`)
   - QEMU runs with user privileges (no need for root)
   - dnsmasq runs under the user's systemd user session
-- **Exception:** Named volume creation requires `sudo` for qemu-nbd and mkfs.ext4 operations (one-time setup per volume)
+- **Exception:** Named volume creation requires `sudo` for qemu-nbd and mkfs.ext4 operations
+  (one-time setup per volume)
 - **Benefits:**
   - Better security isolation
   - Follows principle of least privilege
@@ -222,7 +232,8 @@ VMs can use both named volumes and bind mounts simultaneously. The implementatio
 ### VM Lifecycle Management
 
 - **Base Images:** Downloaded once to `~/.local/share/qemu-compose/images/` (global cache)
-- **Instance Disks:** Created as QCOW2 COW (Copy-On-Write) overlays in `.qemu-compose/<vm-name>/` (project-local)
+- **Instance Disks:** Created as QCOW2 COW (Copy-On-Write) overlays in `.qemu-compose/<vm-name>/`
+  (project-local)
 - **Disk Strategy:** Base images remain pristine; all changes are written to instance overlay disks
 - **Cleanup:** `destroy` command removes instance disks but preserves base images and named volumes
 
@@ -232,7 +243,8 @@ VMs can use both named volumes and bind mounts simultaneously. The implementatio
 - All code identifiers (variables, functions, types, etc.) must be in English
 - Follow Go best practices and idiomatic patterns
 - Use meaningful names that clearly express intent
-- Always pin tool versions to specific stable releases (e.g., `go = "1.25.5"` instead of `go = "latest"`)
+- Always pin tool versions to specific stable releases (e.g., `go = "1.25.5"` instead of
+  `go = "latest"`)
 
 ## Directory Structure
 
@@ -298,7 +310,7 @@ networks:
   default:
     driver: bridge
     subnet: auto
-  
+
 vms:
   fedora-vm:
     image: https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2
@@ -310,7 +322,7 @@ vms:
       - default
     volumes:
       - ./volumes/fedora/:/mnt/
-      
+
   ubuntu-vm:
     image: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
     cpu: 2
@@ -319,5 +331,5 @@ vms:
       - source: ./volumes/ubuntu/
         target: /mnt/
         automount: true
-          
+
 ```
