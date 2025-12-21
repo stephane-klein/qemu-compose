@@ -140,9 +140,18 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Skip file detection for commands that don't need it
-		if cmd.Name() == "help" || cmd.Name() == "completion" || cmd.Name() == "doctor" || cmd.Name() == "ls" || cmd.Name() == "version" {
+		if cmd.Name() == "help" || cmd.Name() == "completion" || cmd.Name() == "doctor" || cmd.Name() == "version" {
 			logger.Printf("Skipping compose file detection for command: %s", cmd.Name())
 			return nil
+		}
+
+		// Special handling for "ls" command
+		if cmd.Name() == "ls" {
+			// "image ls" doesn't need compose file
+			if cmd.Parent() != nil && cmd.Parent().Name() == "image" {
+				logger.Printf("Skipping compose file detection for command: image ls")
+				return nil
+			}
 		}
 
 		// If -f flag was not provided, try environment variable or default files
