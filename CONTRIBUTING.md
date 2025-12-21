@@ -26,7 +26,7 @@ $ source ~/.zshrc
 Once Mise is installed, clone the repository:
 
 ```
-$ git clone https://github.com/stephane-klein/qemu-compose.git
+$ git clone https://github.com/qemu-compose/qemu-compose.git
 $ cd qemu-compose
 ```
 

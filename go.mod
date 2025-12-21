@@ -1,4 +1,4 @@
-module github.com/stephane-klein/qemu-compose
+module github.com/qemu-compose/qemu-compose
 
 go 1.23.5
 

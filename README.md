@@ -59,7 +59,7 @@ without excessive abstraction layers, implemented in Go.
 Execute this command to install `qemu-compose` to `~/bin/qemu-compose`:
 
 ```bash
-$ curl -s https://raw.githubusercontent.com/stephane-klein/qemu-compose/main/install.sh | bash
+$ curl -s https://raw.githubusercontent.com/qemu-compose/qemu-compose/main/install.sh | bash
 ```
 
 ## Usage
@@ -897,12 +897,12 @@ $ QEMU_COMPOSE_DEBUG=true qemu-compose up
    `.qemu-compose/<vm-name>/console.sock`
 5. **Inspect**: Displays detailed information about a VM's configuration, status, networks, volumes,
    and runtime state
-6. **Stop**: 
+6. **Stop**:
    - **Default (graceful)**: Connects via SSH and executes `sudo systemctl poweroff` inside the VM
    - **Forced (`--force`)**: Sends SIGTERM to QEMU process via systemd
    - Cleans up TAP devices (bridge networking)
    - Keeps instance disks, volumes, bridges, and dnsmasq instances
-7. **Destroy**: 
+7. **Destroy**:
    - Stops VMs (gracefully by default, or with `--force`)
    - Removes instance disks (`.qemu-compose/<vm-name>/`)
    - Keeps volumes
