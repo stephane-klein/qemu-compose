@@ -18,6 +18,13 @@ declarative YAML configuration, similar to docker-compose but for VMs on Linux.
 - Automatic process lifecycle, logging via journalctl, resource control via cgroups
 - dnsmasq instances also managed as systemd user units: `qemu-compose-dnsmasq-<project>-<network>`
 
+### VM Shutdown Behavior
+
+- **Default (Graceful)**: `stop` command uses SSH to execute `sudo systemctl poweroff` inside the VM
+- **Forced**: `stop --force` sends SIGTERM to QEMU process for immediate termination
+- Graceful shutdown prevents filesystem corruption and data loss
+- **Destroy Behavior:** The `destroy` command always uses forced shutdown
+
 ### Network Management
 
 - Uses vishvananda/netlink Go library (no external `ip` commands)
@@ -61,5 +68,5 @@ declarative YAML configuration, similar to docker-compose but for VMs on Linux.
 2. **Up**: Create COW overlay disks, generate cloud-init ISO, setup networks/volumes, start via
    systemd-run
 3. **SSH/Console**: Connect to running VM
-4. **Stop**: Stop VM, cleanup TAP devices, keep disks
+4. **Stop**: Graceful shutdown via SSH (`sudo systemctl poweroff`), or forced with `--force` flag
 5. **Destroy**: Stop VM, remove instance disks, keep volumes and base images

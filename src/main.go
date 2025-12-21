@@ -318,10 +318,12 @@ var upCmd = &cobra.Command{
 var stopCmd = &cobra.Command{
 	Use:               "stop [VM...]",
 	Short:             "Stop VMs",
-	Long:              `Stop virtual machines defined in qemu-compose.yaml without removing instance disks. If VM names are provided, only those VMs will be stopped.`,
+	Long:              `Stop virtual machines defined in qemu-compose.yaml without removing instance disks. By default, VMs are stopped gracefully via SSH (sudo systemctl poweroff). Use --force to terminate immediately. If VM names are provided, only those VMs will be stopped.`,
 	ValidArgsFunction: getVMNames,
 	Run: func(cmd *cobra.Command, args []string) {
 		logger.Printf("Executing 'stop' command with compose file: %s", composeFile)
+
+		force, _ := cmd.Flags().GetBool("force")
 
 		config, err := loadComposeFile(composeFile)
 		if err != nil {
@@ -361,13 +363,17 @@ var stopCmd = &cobra.Command{
 			}
 
 			// Stop VM
-			if err := stopVM(vmName, vm); err != nil {
+			if err := stopVM(vmName, vm, force); err != nil {
 				fmt.Fprintf(os.Stderr, "  ✗ Error stopping VM: %v\n\n", err)
 				hasError = true
 				continue
 			}
 
-			fmt.Printf("  ✓ Stopped\n\n")
+			if force {
+				fmt.Printf("  ✓ Stopped (forced)\n\n")
+			} else {
+				fmt.Printf("  ✓ Stopped (graceful)\n\n")
+			}
 		}
 
 		if hasError {
@@ -418,9 +424,9 @@ var destroyCmd = &cobra.Command{
 				continue
 			}
 
-			// Stop VM if running
+			// Stop VM if running (force stop for destroy)
 			if running {
-				if err := stopVM(vmName, vm); err != nil {
+				if err := stopVM(vmName, vm, true); err != nil {
 					fmt.Fprintf(os.Stderr, "  ✗ Error stopping VM: %v\n\n", err)
 					hasError = true
 					continue
@@ -1881,7 +1887,7 @@ var networkDownCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-		// Stop affected VMs
+		// Stop affected VMs (force stop)
 		if len(affectedVMs) > 0 {
 			fmt.Println("Stopping VMs...")
 			hasError := false
@@ -1893,7 +1899,7 @@ var networkDownCmd = &cobra.Command{
 				}
 
 				if running {
-					if err := stopVM(vmName, vm); err != nil {
+					if err := stopVM(vmName, vm, true); err != nil {
 						fmt.Fprintf(os.Stderr, "  ✗ Failed to stop %s: %v\n", vmName, err)
 						hasError = true
 					} else {
@@ -1974,6 +1980,7 @@ func init() {
 
 	pullCmd.Flags().BoolP("force", "", false, "Force re-download even if image already exists")
 	psCmd.Flags().BoolP("wait", "", false, "Wait for all VMs to be ready before displaying status")
+	stopCmd.Flags().BoolP("force", "", false, "Force immediate shutdown (send SIGTERM to QEMU process)")
 	networkDownCmd.Flags().BoolP("force", "", false, "Skip confirmation prompt")
 	inspectCmd.Flags().StringP("format", "", "text", "Output format: text or json")
 

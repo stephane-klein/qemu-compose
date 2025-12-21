@@ -237,6 +237,28 @@ VMs can use both named volumes and bind mounts simultaneously. The implementatio
 - **Disk Strategy:** Base images remain pristine; all changes are written to instance overlay disks
 - **Cleanup:** `destroy` command removes instance disks but preserves base images and named volumes
 
+### VM Shutdown Behavior
+
+- **Default (Graceful Shutdown):** The `stop` command performs a graceful shutdown by default
+  - Connects to the VM via SSH
+  - Executes `sudo systemctl poweroff` inside the VM
+  - Allows the guest OS to shut down cleanly (close files, stop services, unmount filesystems)
+  - Waits for the VM process to terminate
+  - More reliable and prevents filesystem corruption
+- **Forced Shutdown:** Use `stop --force` for immediate termination
+  - Sends SIGTERM to the QEMU process via systemd
+  - Does not wait for guest OS shutdown
+  - Similar to pulling the power plug
+  - Use only when graceful shutdown fails or hangs
+- **Destroy Behavior:** The `destroy` command always uses forced shutdown
+  - Does not perform graceful shutdown since the instance disk will be deleted
+  - No benefit to clean shutdown when disk changes are discarded
+  - Immediately stops the VM and removes instance disks
+- **Rationale:**
+  - Graceful shutdown is safer and prevents data loss
+  - Matches expected behavior from docker-compose and other orchestration tools
+  - Force option available for emergency situations
+
 ## Code Standards
 
 - All documentation (README, comments, etc.) must be written in English

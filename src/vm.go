@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // getProjectName returns the project name based on the current directory
@@ -435,9 +436,90 @@ func isVMRunning(vmName string) (bool, error) {
 	return status == "active", nil
 }
 
-// stopVM stops a running VM
-func stopVM(vmName string, vm VM) error {
-	logger.Printf("Stopping VM: %s", vmName)
+// stopVMGraceful attempts to gracefully shutdown a VM via SSH
+func stopVMGraceful(vmName string, vm VM) error {
+	logger.Printf("Attempting graceful shutdown of VM: %s", vmName)
+
+	// Get SSH port
+	sshPort, err := getSSHPort(vmName)
+	if err != nil {
+		return fmt.Errorf("failed to get SSH port: %w", err)
+	}
+
+	// Get SSH key path
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	sshKeyPath := filepath.Join(cwd, ".qemu-compose", "ssh", "id_ed25519")
+
+	// Check if SSH key exists
+	if _, err := os.Stat(sshKeyPath); os.IsNotExist(err) {
+		return fmt.Errorf("SSH key not found: %s", sshKeyPath)
+	}
+
+	// Detect default user for the OS
+	defaultUser := getDefaultUserForOS(detectOSFromImage(vm.Image))
+
+	logger.Printf("Sending shutdown command via SSH (port: %d, user: %s)", sshPort, defaultUser)
+
+	// Execute shutdown command via SSH
+	sshArgs := []string{
+		"-i", sshKeyPath,
+		"-p", fmt.Sprintf("%d", sshPort),
+		"-o", "ConnectTimeout=5",
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		fmt.Sprintf("%s@localhost", defaultUser),
+		"sudo", "systemctl", "poweroff",
+	}
+
+	cmd := exec.Command("ssh", sshArgs...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		logger.Printf("SSH shutdown command failed: %v, output: %s", err, string(output))
+		return fmt.Errorf("failed to execute shutdown via SSH: %w", err)
+	}
+
+	logger.Printf("Shutdown command sent successfully, waiting for VM to stop...")
+
+	// Wait for VM to stop (up to 60 seconds)
+	unitName := getVMUnitName(vmName)
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for VM to stop gracefully")
+
+		case <-ticker.C:
+			cmd := exec.Command("systemctl", "--user", "is-active", unitName)
+			output, err := cmd.Output()
+
+			if err != nil {
+				// Unit is not active
+				logger.Printf("VM has stopped")
+				return nil
+			}
+
+			status := strings.TrimSpace(string(output))
+			if status != "active" {
+				logger.Printf("VM has stopped (status: %s)", status)
+				return nil
+			}
+
+			logger.Printf("Waiting for VM to stop... (status: %s)", status)
+		}
+	}
+}
+
+// stopVMForced forcefully stops a VM by sending SIGTERM to the QEMU process
+func stopVMForced(vmName string) error {
+	logger.Printf("Forcefully stopping VM: %s", vmName)
 
 	unitName := getVMUnitName(vmName)
 
@@ -445,6 +527,33 @@ func stopVM(vmName string, vm VM) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to stop VM: %w\nOutput: %s", err, string(output))
+	}
+
+	logger.Printf("VM stopped forcefully: %s", vmName)
+	return nil
+}
+
+// stopVM stops a running VM
+// If force is false, attempts graceful shutdown via SSH first, then falls back to forced stop
+// If force is true, immediately sends SIGTERM to the QEMU process
+func stopVM(vmName string, vm VM, force bool) error {
+	logger.Printf("Stopping VM: %s (force: %v)", vmName, force)
+
+	if force {
+		// Force stop immediately
+		if err := stopVMForced(vmName); err != nil {
+			return err
+		}
+	} else {
+		// Try graceful shutdown first
+		err := stopVMGraceful(vmName, vm)
+		if err != nil {
+			logger.Printf("Graceful shutdown failed: %v, falling back to forced stop", err)
+			// Fall back to forced stop
+			if err := stopVMForced(vmName); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Cleanup network infrastructure if VM uses bridge networking
@@ -455,7 +564,6 @@ func stopVM(vmName string, vm VM) error {
 		}
 	}
 
-	logger.Printf("VM stopped successfully: %s", vmName)
 	return nil
 }
 

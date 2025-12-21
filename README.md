@@ -38,6 +38,7 @@ $ qemu-compose ssh fedora-vm
 - Automatic SSH access with generated key pairs
 - Bridge networking (optional) with DHCP/DNS via dnsmasq
 - Volume mounting including named volumes and bind mounts
+- Graceful VM shutdown with forced shutdown option
 
 ## Why I created this project
 
@@ -688,7 +689,7 @@ $ qemu-compose inspect fedora-vm --format json
 
 ### Stopping VMs
 
-Stop all VMs without removing their instance disks:
+Stop all VMs gracefully (default behavior):
 
 ```bash
 $ qemu-compose stop
@@ -697,13 +698,50 @@ Project: myproject
 Stopping 2 VM(s)...
 
 VM: fedora-vm
+  ✓ Shutting down gracefully via SSH...
   ✓ Stopped
 
 VM: ubuntu-vm
+  ✓ Shutting down gracefully via SSH...
   ✓ Stopped
 
 ✓ All VMs stopped successfully
 ```
+
+By default, the `stop` command performs a **graceful shutdown**:
+
+1. Connects to the VM via SSH
+2. Executes `sudo systemctl poweroff` inside the VM
+3. Waits for the guest OS to shut down cleanly
+4. Allows the VM to close files, stop services, and unmount filesystems properly
+
+This prevents filesystem corruption and data loss.
+
+#### Forced Shutdown
+
+For immediate termination without waiting for the guest OS to shut down, use the `--force` flag:
+
+```bash
+$ qemu-compose stop --force
+Using compose file: qemu-compose.yaml
+Project: myproject
+Stopping 2 VM(s)...
+
+VM: fedora-vm
+  ✓ Stopped (forced)
+
+VM: ubuntu-vm
+  ✓ Stopped (forced)
+
+✓ All VMs stopped successfully
+```
+
+The `--force` flag:
+
+- Sends SIGTERM to the QEMU process via systemd
+- Does not wait for the guest OS to shut down
+- Similar to pulling the power plug
+- Should only be used when graceful shutdown fails or hangs
 
 The instance disks remain in `.qemu-compose/<vm-name>/` and can be reused when you run `up` again.
 
@@ -721,14 +759,23 @@ Project: myproject
 Stopping and removing 2 VM(s)...
 
 VM: fedora-vm
+  ✓ Shutting down gracefully via SSH...
   ✓ Stopped
   ✓ Instance disk removed
 
 VM: ubuntu-vm
+  ✓ Shutting down gracefully via SSH...
   ✓ Stopped
   ✓ Instance disk removed
 
 ✓ All VMs stopped and removed successfully
+```
+
+The `destroy` command performs a graceful shutdown by default (same as `stop`). You can also use the
+`--force` flag for immediate termination:
+
+```bash
+$ qemu-compose destroy --force
 ```
 
 This removes the `.qemu-compose/<vm-name>/` directories. Base images in
@@ -752,7 +799,7 @@ Since VMs are managed by systemd, you can also use standard systemctl commands:
 # Check VM status
 $ systemctl --user status qemu-compose-myproject-fedora-vm
 
-# Stop a VM
+# Stop a VM (sends SIGTERM to QEMU process)
 $ systemctl --user stop qemu-compose-myproject-fedora-vm
 
 # Restart a VM
@@ -761,6 +808,9 @@ $ systemctl --user restart qemu-compose-myproject-fedora-vm
 # View logs
 $ journalctl --user -u qemu-compose-myproject-fedora-vm -f
 ```
+
+**Note**: Using `systemctl --user stop` directly will perform a forced shutdown (SIGTERM to QEMU
+process), not a graceful shutdown. For graceful shutdown, use `qemu-compose stop` instead.
 
 You can also manage dnsmasq instances:
 
@@ -847,9 +897,15 @@ $ QEMU_COMPOSE_DEBUG=true qemu-compose up
    `.qemu-compose/<vm-name>/console.sock`
 5. **Inspect**: Displays detailed information about a VM's configuration, status, networks, volumes,
    and runtime state
-6. **Stop**: Stops VMs, cleans up TAP devices (bridge networking), but keeps instance disks,
-   volumes, bridges, and dnsmasq instances
-7. **Destroy**: Stops VMs and removes instance disks (`.qemu-compose/<vm-name>/`), but keeps volumes
+6. **Stop**: 
+   - **Default (graceful)**: Connects via SSH and executes `sudo systemctl poweroff` inside the VM
+   - **Forced (`--force`)**: Sends SIGTERM to QEMU process via systemd
+   - Cleans up TAP devices (bridge networking)
+   - Keeps instance disks, volumes, bridges, and dnsmasq instances
+7. **Destroy**: 
+   - Stops VMs (gracefully by default, or with `--force`)
+   - Removes instance disks (`.qemu-compose/<vm-name>/`)
+   - Keeps volumes
 
 Each VM runs as a systemd user unit, providing:
 
